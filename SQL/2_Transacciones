@@ -1,0 +1,158 @@
+--2 Transacciones 
+
+CREATE TABLE auditoria_transacciones_errores (
+    id SERIAL PRIMARY KEY,
+    proceso VARCHAR(100) NOT NULL,
+    parametros_entrada JSONB,
+    mensaje_error TEXT NOT NULL,
+    usuario_accion VARCHAR(50) DEFAULT CURRENT_USER,
+    fecha_error TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);
+
+--Transaccion 
+
+CREATE OR REPLACE FUNCTION fn_procesar_inscripcion_completa(
+    p_alumno_id INTEGER,
+    p_curso_id INTEGER,
+    p_instructor_id INTEGER,
+    p_metodo_pago VARCHAR,
+    p_concepto VARCHAR,
+    p_cantidad INTEGER,
+    p_precio_unitario NUMERIC
+)
+RETURNS INTEGER AS $$
+DECLARE
+    v_nueva_inscripcion_id INTEGER;
+    v_cupo_maximo INTEGER;
+    v_inscritos_actuales INTEGER;
+    v_subtotal NUMERIC;
+    v_json_params JSONB;
+BEGIN
+    -- 1. Iniciar la Transacción (implícito en la función)
+    
+    -- Construir JSON para registro de errores
+    v_json_params := jsonb_build_object(
+        'alumno_id', p_alumno_id,
+        'curso_id', p_curso_id,
+        'metodo_pago', p_metodo_pago
+    );
+
+    -- 2. Validación de Cupo (Doble chequeo por seguridad, aunque hay un trigger)
+    SELECT cupo_maximo, inscritos_actuales INTO v_cupo_maximo, v_inscritos_actuales
+    FROM usuarios_curso
+    WHERE id = p_curso_id
+    FOR UPDATE; -- Bloqueo de fila para evitar condiciones de carrera (Race Conditions)
+
+    IF v_inscritos_actuales >= v_cupo_maximo THEN
+        RAISE EXCEPTION 'Cupo lleno: El curso ID % no tiene disponibilidad.', p_curso_id;
+    END IF;
+
+    -- 3. Inserción en usuarios_inscripcion
+    INSERT INTO usuarios_inscripcion (
+        alumno_id, curso_id, instructor_id, metodo_pago, estado_inscripcion
+    )
+    VALUES (
+        p_alumno_id, p_curso_id, p_instructor_id, p_metodo_pago, 'Activa'
+    )
+    RETURNING id INTO v_nueva_inscripcion_id;
+
+    -- 4. Cálculo e Inserción en usuarios_detalleinscripcion
+    v_subtotal := p_cantidad * p_precio_unitario;
+    
+    INSERT INTO usuarios_detalleinscripcion (
+        inscripcion_id, concepto, cantidad, precio_unitario, subtotal
+    )
+    VALUES (
+        v_nueva_inscripcion_id, p_concepto, p_cantidad, p_precio_unitario, v_subtotal
+    );
+
+    -- 5. Actualización del Cupo
+    UPDATE usuarios_curso
+    SET inscritos_actuales = inscritos_actuales + 1
+    WHERE id = p_curso_id;
+
+    -- 6. COMMIT (implícito al finalizar BEGIN con éxito)
+    RETURN v_nueva_inscripcion_id;
+
+-- 7. Manejo de Errores (Bloque EXCEPTION simula TRY/CATCH)
+EXCEPTION
+    WHEN OTHERS THEN
+        -- ROLLBACK (implícito por el fallo de la transacción)
+        
+        -- Registro de auditoría del error
+        INSERT INTO auditoria_transacciones_errores (
+            proceso, parametros_entrada, mensaje_error
+        )
+        VALUES (
+            'INSCRIPCION', v_json_params, SQLERRM
+        );
+        
+        -- Relanzar la excepción para notificar al llamador
+        RAISE EXCEPTION 'Fallo la transacción de inscripción. Mensaje de error: %', SQLERRM;
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+--Cancelacion de inscripcion 
+
+
+CREATE OR REPLACE FUNCTION fn_cancelar_inscripcion_y_revertir_cupo(
+    p_inscripcion_id INTEGER
+)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_curso_id INTEGER;
+    v_estado_actual VARCHAR(20);
+    v_json_params JSONB;
+BEGIN
+    -- 1. Iniciar la Transacción (implícito)
+    v_json_params := jsonb_build_object('inscripcion_id', p_inscripcion_id);
+    
+    -- 2. Obtener datos de la inscripción y bloquear la fila
+    SELECT curso_id, estado_inscripcion INTO v_curso_id, v_estado_actual
+    FROM usuarios_inscripcion
+    WHERE id = p_inscripcion_id
+    FOR UPDATE; -- Bloqueo de fila
+
+    -- Validar existencia y estado
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'La inscripción ID % no existe.', p_inscripcion_id;
+    END IF;
+
+    IF v_estado_actual = 'Cancelada' THEN
+        RAISE EXCEPTION 'La inscripción ID % ya se encuentra cancelada.', p_inscripcion_id;
+    END IF;
+
+    -- 3. Actualizar el estado de la inscripción (Esto activará el Trigger de Auditoría)
+    UPDATE usuarios_inscripcion
+    SET estado_inscripcion = 'Cancelada'
+    WHERE id = p_inscripcion_id;
+
+    -- 4. Revertir el cupo en el curso
+    UPDATE usuarios_curso
+    SET inscritos_actuales = inscritos_actuales - 1
+    WHERE id = v_curso_id;
+
+    -- 5. COMMIT (implícito al finalizar BEGIN con éxito)
+    RETURN TRUE;
+
+-- 6. Manejo de Errores (Bloque EXCEPTION)
+EXCEPTION
+    WHEN OTHERS THEN
+        -- ROLLBACK (implícito por el fallo)
+        
+        -- Registro de auditoría del error
+        INSERT INTO auditoria_transacciones_errores (
+            proceso, parametros_entrada, mensaje_error
+        )
+        VALUES (
+            'CANCELACION_INSCRIPCION', v_json_params, SQLERRM
+        );
+        
+        -- Relanzar la excepción
+        RAISE EXCEPTION 'Fallo la cancelación. Mensaje de error: %', SQLERRM;
+
+END;
+$$ LANGUAGE plpgsql;

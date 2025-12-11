@@ -1,0 +1,116 @@
+--6_TecnicasAvanzadas
+
+-- SImulacion de reporte de inscripcion 
+
+SELECT
+    uc.nombre_curso,
+    uc.nivel,
+    -- Simulación de PIVOT: Contar inscripciones por mes
+    COUNT(CASE WHEN EXTRACT(MONTH FROM ui.fecha_inscripcion) = 1 THEN 1 ELSE NULL END) AS inscripciones_enero,
+    COUNT(CASE WHEN EXTRACT(MONTH FROM ui.fecha_inscripcion) = 2 THEN 1 ELSE NULL END) AS inscripciones_febrero,
+    COUNT(CASE WHEN EXTRACT(MONTH FROM ui.fecha_inscripcion) = 3 THEN 1 ELSE NULL END) AS inscripciones_marzo,
+    COUNT(CASE WHEN EXTRACT(MONTH FROM ui.fecha_inscripcion) = 4 THEN 1 ELSE NULL END) AS inscripciones_abril,
+    COUNT(CASE WHEN EXTRACT(MONTH FROM ui.fecha_inscripcion) = 5 THEN 1 ELSE NULL END) AS inscripciones_mayo,
+    COUNT(CASE WHEN EXTRACT(MONTH FROM ui.fecha_inscripcion) = 6 THEN 1 ELSE NULL END) AS inscripciones_junio
+    -- ... Continuar con los meses restantes ...
+FROM
+    usuarios_inscripcion ui
+INNER JOIN
+    usuarios_curso uc ON ui.curso_id = uc.id -- JOINs
+WHERE
+    ui.estado_inscripcion = 'Activa' AND EXTRACT(YEAR FROM ui.fecha_inscripcion) = 2025 -- Filtrar por un año específico si es necesario
+GROUP BY
+    uc.nombre_curso, uc.nivel
+ORDER BY
+    uc.nombre_curso;
+
+--Subconsultas y joins donde hay inscirpciones viegentes
+
+SELECT
+    ua.nombre_completo AS nombre_alumno,
+    uc.nombre_curso,
+    ui.fecha_inscripcion,
+    uti.nombre_completo AS nombre_instructor,
+    uc.fecha_fin AS fecha_fin_curso
+FROM
+    usuarios_inscripcion ui
+INNER JOIN
+    usuarios_alumno ua ON ui.alumno_id = ua.usuario_id -- JOINs
+INNER JOIN
+    usuarios_instructor uti ON ui.instructor_id = uti.usuario_id -- JOINs
+WHERE
+    ui.curso_id IN (
+        -- Subconsulta para identificar Cursos Activos
+        SELECT id
+        FROM usuarios_curso
+        WHERE estado_curso IN ('Activo', 'Programado')
+    )
+    AND ui.estado_inscripcion = 'Activa' -- Inscripciones Vigentes
+ORDER BY
+    ui.fecha_inscripcion DESC;
+
+
+--Calificacion de alumnos
+
+WITH ConteoInscripciones AS (
+    -- Cuenta las inscripciones activas por alumno
+    SELECT
+        alumno_id,
+        COUNT(id) AS total_inscripciones
+    FROM
+        usuarios_inscripcion
+    WHERE
+        estado_inscripcion = 'Activa'
+    GROUP BY
+        alumno_id
+)
+SELECT
+    ua.nombre_completo AS nombre_alumno,
+    ci.total_inscripciones,
+    -- Clasificación usando CASE
+    CASE
+        WHEN ci.total_inscripciones = 1 THEN 'Nuevo Ingreso'
+        WHEN ci.total_inscripciones BETWEEN 2 AND 4 THEN 'Alumno Recurrente'
+        WHEN ci.total_inscripciones >= 5 THEN 'Alumno VIP / Frecuente'
+        ELSE 'Sin Inscripciones Activas'
+    END AS tipo_participacion
+FROM
+    ConteoInscripciones ci
+INNER JOIN
+    usuarios_alumno ua ON ci.alumno_id = ua.usuario_id -- JOINs
+ORDER BY
+    ci.total_inscripciones DESC;
+
+
+--Cursos mas solicitados
+
+WITH RankingCursos AS (
+    -- CTE: Cuenta inscripciones y aplica la función de ranking
+    SELECT
+        uc.nombre_curso,
+        uc.nivel,
+        COUNT(ui.id) AS total_inscripciones_activas,
+        -- Función RANKING: Asigna un rango (maneja empates)
+        DENSE_RANK() OVER (ORDER BY COUNT(ui.id) DESC) AS rank_solicitud
+    FROM
+        usuarios_inscripcion ui
+    INNER JOIN
+        usuarios_curso uc ON ui.curso_id = uc.id -- JOINs
+    WHERE
+        ui.estado_inscripcion = 'Activa'
+    GROUP BY
+        uc.nombre_curso, uc.nivel
+)
+-- Consulta final: Filtra el resultado para mostrar solo el Top 5
+SELECT
+    rank_solicitud AS "Puesto",
+    nombre_curso AS "Curso",
+    nivel AS "Nivel",
+    total_inscripciones_activas AS "Total Inscripciones"
+FROM
+    RankingCursos
+WHERE
+    rank_solicitud <= 5
+ORDER BY
+    rank_solicitud;
+

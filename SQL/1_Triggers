@@ -1,0 +1,152 @@
+--1 Triggers 
+
+-- tablas de auditoria 
+
+CREATE TABLE auditoria_inscripciones_cambios (
+    id SERIAL PRIMARY KEY,
+    inscripcion_id INTEGER NOT NULL,
+    campo_modificado VARCHAR(50) NOT NULL,
+    valor_anterior TEXT,
+    valor_nuevo TEXT,
+    usuario_modificador VARCHAR(50) DEFAULT CURRENT_USER,
+    fecha_modificacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);
+
+
+CREATE TABLE auditoria_inscripciones_historial (
+    id SERIAL PRIMARY KEY,
+    inscripcion_id INTEGER NOT NULL,
+    accion_realizada VARCHAR(50) NOT NULL CHECK (accion_realizada IN ('CANCELACION', 'ELIMINACION', 'CAMBIO_ESTADO')),
+    datos_inscripcion_antes JSONB, -- Almacena el registro completo antes de la acción
+    usuario_accion VARCHAR(50) DEFAULT CURRENT_USER,
+    fecha_accion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);
+
+--Creación de trigger
+
+CREATE OR REPLACE FUNCTION fn_validar_cupo_curso()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_cupo_maximo INTEGER;
+    v_inscritos_actuales INTEGER;
+BEGIN
+    -- Obtener la información del curso
+    SELECT cupo_maximo, inscritos_actuales INTO v_cupo_maximo, v_inscritos_actuales
+    FROM usuarios_curso
+    WHERE id = NEW.curso_id;
+
+    -- Verificar si el cupo actual es menor que el máximo
+    IF v_inscritos_actuales >= v_cupo_maximo THEN
+        -- Lanzar una excepción y abortar la inserción
+        RAISE EXCEPTION 'El curso con ID % ha alcanzado su cupo máximo (%) y no permite más inscripciones.', NEW.curso_id, v_cupo_maximo
+        USING HINT = 'Verifique el cupo máximo o el número actual de inscritos.';
+    END IF;
+
+    -- Si hay cupo, permitir la inserción
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+CREATE TRIGGER TRG_VALIDAR_CUPO_INSCRIPCION
+BEFORE INSERT ON usuarios_inscripcion
+FOR EACH ROW
+EXECUTE FUNCTION fn_validar_cupo_curso();
+
+--Auditorias Automaticas Actualizacion
+
+CREATE OR REPLACE FUNCTION fn_auditar_inscripcion_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Ejemplo de auditoría solo para el cambio de estado_inscripcion
+    IF OLD.estado_inscripcion IS DISTINCT FROM NEW.estado_inscripcion THEN
+        INSERT INTO auditoria_inscripciones_cambios (
+            inscripcion_id, campo_modificado, valor_anterior, valor_nuevo
+        )
+        VALUES (
+            NEW.id, 'estado_inscripcion', OLD.estado_inscripcion, NEW.estado_inscripcion
+        );
+        
+        -- Registro adicional en la otra tabla de auditoría para cambios de estado importantes
+        INSERT INTO auditoria_inscripciones_historial (
+            inscripcion_id, accion_realizada, datos_inscripcion_antes
+        )
+        VALUES (
+            OLD.id, 'CAMBIO_ESTADO', to_jsonb(OLD)
+        );
+    END IF;
+
+  
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER TRG_AUDIT_INSCRIPCION_UPDATE
+AFTER UPDATE ON usuarios_inscripcion
+FOR EACH ROW
+EXECUTE FUNCTION fn_auditar_inscripcion_update();
+
+---Auditoria Eliminaciones y cancelacion
+
+
+CREATE OR REPLACE FUNCTION fn_auditar_inscripcion_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Registro de la eliminación en la tabla de historial
+    INSERT INTO auditoria_inscripciones_historial (
+        inscripcion_id, accion_realizada, datos_inscripcion_antes
+    )
+    VALUES (
+        OLD.id, 'ELIMINACION', to_jsonb(OLD) -- Almacena el registro completo antes de ser eliminado
+    );
+    RETURN OLD; -- Debe retornar OLD en un trigger BEFORE DELETE para permitir la eliminación
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER TRG_AUDIT_INSCRIPCION_DELETE
+BEFORE DELETE ON usuarios_inscripcion
+FOR EACH ROW
+EXECUTE FUNCTION fn_auditar_inscripcion_delete();
+
+
+--Actualizacion automatica estado curso 
+
+
+CREATE OR REPLACE FUNCTION fn_actualizar_estado_curso_fechas()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.fecha_fin < CURRENT_DATE AND NEW.estado_curso != 'Finalizado' THEN
+        -- Si la fecha de fin es pasada y no está ya finalizado, se marca como 'Finalizado'
+        NEW.estado_curso = 'Finalizado';
+        RAISE NOTICE 'El curso ID % se actualiza automáticamente a "Finalizado".', NEW.id;
+    ELSIF NEW.fecha_inicio > CURRENT_DATE AND NEW.estado_curso != 'Activo' THEN
+        -- Ejemplo: Si la fecha de inicio es futura (podría ser 'Activo' o 'Programado' dependiendo del modelo de negocio)
+        -- Lo mantendremos en Activo por simplicidad si no ha sido cancelado
+        IF NEW.estado_curso != 'Cancelado' THEN
+             NEW.estado_curso = 'Activo';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER TRG_ACTUALIZAR_ESTADO_CURSO_FECHAS
+BEFORE INSERT OR UPDATE ON usuarios_curso
+FOR EACH ROW
+EXECUTE FUNCTION fn_actualizar_estado_curso_fechas();
+
+
+
+
+
+
+
+
+
+
+

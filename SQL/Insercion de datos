@@ -1,0 +1,73 @@
+INSERT INTO usuarios_usuario
+(id, password, last_login, is_superuser, username, first_name, last_name, email, 
+ is_staff, is_active, date_joined, tipo_usuario, estado, fecha_registro)
+VALUES
+
+(5, 'pass', NULL, false, 'luisa', 'Luisa', 'Fernández', 'luisa@mail.com', false, true, NOW(), 'Alumno', 'Activo', NOW()),
+(6, 'pass', NULL, false, 'kevin', 'Kevin', 'Silva', 'kevin@mail.com', false, true, NOW(), 'Alumno', 'Activo', NOW()),
+(7, 'pass', NULL, false, 'daniel', 'Daniel', 'Soto', 'daniel@mail.com', false, true, NOW(), 'Alumno', 'Activo', NOW()),
+(8, 'pass', NULL, false, 'patricia', 'Patricia', 'Mendoza', 'patricia@mail.com', false, true, NOW(), 'Alumno', 'Activo', NOW()),
+(9, 'pass', NULL, false, 'sandra', 'Sandra', 'Guzmán', 'sandra@mail.com', false, true, NOW(), 'Alumno', 'Activo', NOW()),
+(10, 'pass', NULL, false, 'pedro', 'Pedro', 'Castillo', 'pedro@mail.com', false, true, NOW(), 'Alumno', 'Activo', NOW()),
+
+(11, 'pass', NULL, false, 'roberto', 'Roberto', 'Morales', 'roberto@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(12, 'pass', NULL, false, 'laura', 'Laura', 'Sánchez', 'laura@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(13, 'pass', NULL, false, 'hector', 'Héctor', 'Vázquez', 'hector@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(14, 'pass', NULL, false, 'patricia_r', 'Patricia', 'Ríos', 'patricia_r@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(15, 'pass', NULL, false, 'elena', 'Elena', 'Álvarez', 'elena@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(16, 'pass', NULL, false, 'tomas', 'Tomás', 'Herrera', 'tomas@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(17, 'pass', NULL, false, 'raul', 'Raúl', 'Ordóñez', 'raul@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(18, 'pass', NULL, false, 'cristina', 'Cristina', 'Solís', 'cristina@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(19, 'pass', NULL, false, 'oscar', 'Óscar', 'Martínez', 'oscar@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+(20, 'pass', NULL, false, 'marta', 'Marta', 'Carrillo', 'marta@mail.com', false, true, NOW(), 'Instructor', 'Activo', NOW()),
+
+(21, 'pass', NULL, true, 'admin1', 'Admin', 'Uno', 'admin1@mail.com', true, true, NOW(), 'Admin', 'Activo', NOW()),
+(22, 'pass', NULL, true, 'admin2', 'Admin', 'Dos', 'admin2@mail.com', true, true, NOW(), 'Admin', 'Activo', NOW()),
+(23, 'pass', NULL, true, 'admin3', 'Admin', 'Tres', 'admin3@mail.com', true, true, NOW(), 'Admin', 'Activo', NOW()),
+(24, 'pass', NULL, true, 'admin4', 'Admin', 'Cuatro', 'admin4@mail.com', true, true, NOW(), 'Admin', 'Activo', NOW()),
+(25, 'pass', NULL, true, 'admin5', 'Admin', 'Cinco', 'admin5@mail.com', true, true, NOW(), 'Admin', 'Activo', NOW());
+
+
+
+
+
+INSERT INTO usuarios_alumno 
+(id, nombre_completo, telefono, direccion, tipo_documento, numero_documento, fecha_registro, usuario_id) 
+VALUES
+
+(3, 'María López', '5534567890', 'Calle Mar 78', 'Pasaporte', 'MX998877', NOW(), 3),
+
+(5, 'Luisa Fernández', '5567891234', 'Calle Sur 90', 'DNI', 'D445566', NOW(), 5),
+
+(7, 'Daniel Soto', '5587654321', 'Calle Oeste 65', 'DNI', 'E556677', NOW(), 7),
+(8, 'Patricia Mendoza', '5523987654', 'Av. Río 87', 'DNI', 'F778899', NOW(), 8),
+(9, 'Sandra Guzmán', '5574123658', 'Calle Lago 32', 'Pasaporte', 'MX334455', NOW(), 9),
+(10,'Pedro Castillo', '5512349876', 'Av. Viento 55', 'DNI', 'G990011', NOW(), 10);
+
+
+
+INSERT INTO usuarios_administrador (nombre_completo, usuario_id) VALUES
+('Adriana Robles', 1),
+('Fernando Ortiz', 2),
+('Gabriela Téllez', 3),
+('Mario Aguilar', 4),
+('Rocío Navarro', 5);
+
+
+
+
+INSERT INTO usuarios_inscripcion
+(fecha_inscripcion, metodo_pago, estado_inscripcion, total_pago, alumno_id, curso_id, instructor_id)
+VALUES
+(now(), 'Tarjeta', 'Activa', 500.00, 1, 1, 12),
+(now(), 'Transferencia', 'Activa', 700.00, 2, 2, 13),
+(now(), 'Efectivo', 'Activa', 650.00, 3, 3, 11),
+(now(), 'Tarjeta', 'Activa', 600.00, 4, 4, 15),
+(now(), 'Transferencia', 'Pendiente', 750.00, 5, 5, 19),
+(now(), 'Efectivo', 'Activa', 500.00, 6, 6, 17),
+(now(), 'Tarjeta', 'Anulada', 0.00, 7, 7, 14),
+(now(), 'Tarjeta', 'Activa', 800.00, 8, 8, 18),
+(now(), 'Transferencia', 'Activa', 900.00, 9, 9, 16),
+(now(), 'Tarjeta', 'Activa', 550.00, 10, 10, 20);
+
+

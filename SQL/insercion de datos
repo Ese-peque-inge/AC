@@ -1,0 +1,106 @@
+--insercion de datos
+select * from usuarios_usuario 
+
+
+INSERT INTO usuarios_usuario (id, username, password, email, is_active)
+VALUES
+(1, 'carlos', 'pass', 'carlos@mail.com', true),
+(2, 'ana', 'pass', 'ana@mail.com', true),
+(3, 'maria', 'pass', 'maria@mail.com', true),
+(4, 'jorge', 'pass', 'jorge@mail.com', true),
+(5, 'luisa', 'pass', 'luisa@mail.com', true),
+(6, 'kevin', 'pass', 'kevin@mail.com', true),
+(7, 'daniel', 'pass', 'daniel@mail.com', true),
+(8, 'patricia', 'pass', 'patricia@mail.com', true),
+(9, 'sandra', 'pass', 'sandra@mail.com', true),
+(10, 'pedro', 'pass', 'pedro@mail.com', true),
+
+(11, 'roberto', 'pass', 'roberto@mail.com', true),
+(12, 'laura', 'pass', 'laura@mail.com', true),
+(13, 'hector', 'pass', 'hector@mail.com', true),
+(14, 'patricia_r', 'pass', 'patricia_r@mail.com', true),
+(15, 'elena', 'pass', 'elena@mail.com', true),
+(16, 'tomas', 'pass', 'tomas@mail.com', true),
+(17, 'raul', 'pass', 'raul@mail.com', true),
+(18, 'cristina', 'pass', 'cristina@mail.com', true),
+(19, 'oscar', 'pass', 'oscar@mail.com', true),
+(20, 'marta', 'pass', 'marta@mail.com', true),
+
+(21, 'admin1', 'pass', 'admin1@mail.com', true),
+(22, 'admin2', 'pass', 'admin2@mail.com', true),
+(23, 'admin3', 'pass', 'admin3@mail.com', true),
+(24, 'admin4', 'pass', 'admin4@mail.com', true),
+(25, 'admin5', 'pass', 'admin5@mail.com', true);
+
+
+
+INSERT INTO usuarios_instructor (usuario_id, nombre_completo, especialidad, estado) VALUES
+(11, 'Roberto Morales', 'Matemáticas', 'Activo'),
+(12, 'Laura Sánchez', 'Programación', 'Activo'),
+(13, 'Héctor Vázquez', 'Inglés', 'Activo'),
+(14, 'Patricia Ríos', 'Física', 'Activo'),
+(15, 'Elena Álvarez', 'Robótica', 'Inactivo'),
+(16, 'Tomás Herrera', 'Química', 'Activo'),
+(17, 'Raúl Ordóñez', 'Diseño Gráfico', 'Activo'),
+(18, 'Cristina Solís', 'Bases de Datos', 'Activo'),
+(19, 'Oscar Martínez', 'Ciberseguridad', 'Inactivo'),
+(20, 'Marta Carrillo', 'Admin. de Servidores', 'Activo');
+
+
+
+INSERT INTO usuarios_administrador (usuario_id, nombre_completo) VALUES
+(21, 'Adriana Robles'),
+(22, 'Fernando Ortiz'),
+(23, 'Gabriela Téllez'),
+(24, 'Mario Aguilar'),
+(25, 'Rocío Navarro'),
+(26, 'Hugo Benítez'),
+(27, 'Beatriz Carranza'),
+(28, 'Ricardo Valdez'),
+(29, 'Claudia Gómez'),
+(30, 'Sergio Molina');
+
+
+
+INSERT INTO usuarios_curso (nombre_curso, nivel, duracion_semanas, costo, estado_curso, fecha_inicio, fecha_fin, cupo_maximo, inscritos_actuales) VALUES
+('Programación en Python', 'Básico', 8, 1500.00, 'Activo', '2025-02-01', '2025-03-29', 20, 12),
+('Inglés A1', 'Básico', 12, 2000.00, 'Activo', '2025-02-10', '2025-05-05', 20, 18),
+('Matemáticas Aplicadas', 'Intermedio', 10, 1800.00, 'Activo', '2025-03-01', '2025-05-10', 20, 14),
+('Robótica Inicial', 'Básico', 6, 2500.00, 'Activo', '2025-01-15', '2025-02-26', 20, 10),
+('Ciberseguridad', 'Avanzado', 14, 3500.00, 'Activo', '2025-04-01', '2025-07-10', 20, 5),
+('Diseño Gráfico', 'Intermedio', 8, 1600.00, 'Activo', '2025-03-15', '2025-05-10', 20, 17),
+('Química Fundamental', 'Básico', 10, 1200.00, 'Activo', '2025-02-20', '2025-04-30', 20, 8),
+('SQL y Bases de Datos', 'Básico', 7, 1700.00, 'Activo', '2025-03-01', '2025-04-20', 20, 11),
+('Física General', 'Intermedio', 12, 2100.00, 'Inactivo', '2025-01-10', '2025-04-05', 20, 0),
+('Admin. de Servidores', 'Avanzado', 15, 4000.00, 'Activo', '2025-05-01', '2025-08-15', 20, 6);
+
+
+
+
+INSERT INTO usuarios_inscripcion (alumno_id, curso_id, instructor_id, metodo_pago, estado_inscripcion) VALUES
+(1, 1, 12, 'Tarjeta', 'Activa'),
+(2, 2, 13, 'Transferencia', 'Activa'),
+(3, 3, 11, 'Efectivo', 'Activa'),
+(4, 4, 15, 'Tarjeta', 'Activa'),
+(5, 5, 19, 'Transferencia', 'Pendiente'),
+(6, 6, 17, 'Efectivo', 'Activa'),
+(7, 7, 14, 'Tarjeta', 'Anulada'),
+(8, 8, 18, 'Tarjeta', 'Activa'),
+(9, 9, 16, 'Transferencia', 'Activa'),
+(10, 10, 20, 'Tarjeta', 'Activa');
+
+INSERT INTO usuarios_detalleinscripcion (inscripcion_id, concepto, cantidad, precio_unitario, subtotal) VALUES
+(1, 'Pago curso', 1, 1500.00, 1500.00),
+(2, 'Pago curso', 1, 2000.00, 2000.00),
+(3, 'Pago curso', 1, 1800.00, 1800.00),
+(4, 'Pago curso', 1, 2500.00, 2500.00),
+(5, 'Pago curso', 1, 3500.00, 3500.00),
+(6, 'Pago curso', 1, 1600.00, 1600.00),
+(7, 'Pago curso', 1, 1200.00, 1200.00),
+(8, 'Pago curso', 1, 1700.00, 1700.00),
+(9, 'Pago curso', 1, 2100.00, 2100.00),
+(10,'Pago curso', 1, 4000.00, 4000.00);
+
+
+
+

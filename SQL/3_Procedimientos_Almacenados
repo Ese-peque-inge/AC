@@ -1,0 +1,217 @@
+--3 Procedimientos almacenados 
+
+CREATE OR REPLACE FUNCTION fn_registrar_nueva_inscripcion_simple(
+    p_alumno_id INTEGER,
+    p_curso_id INTEGER,
+    p_instructor_id INTEGER,
+    p_metodo_pago VARCHAR,
+    p_precio_unitario NUMERIC, -- Usado para detalle
+    p_cantidad INTEGER DEFAULT 1 -- Asumimos 1 inscripción
+)
+RETURNS INTEGER AS $$
+DECLARE
+    v_inscripcion_id INTEGER;
+    v_cupo_maximo INTEGER;
+    v_inscritos_actuales INTEGER;
+    v_subtotal NUMERIC;
+BEGIN
+    -- 1. Validación de Cupo
+    SELECT cupo_maximo, inscritos_actuales INTO v_cupo_maximo, v_inscritos_actuales
+    FROM usuarios_curso
+    WHERE id = p_curso_id
+    FOR UPDATE;
+
+    IF v_inscritos_actuales >= v_cupo_maximo THEN
+        RAISE EXCEPTION 'Error 409: El curso ID % ha alcanzado su cupo máximo (%).', p_curso_id, v_cupo_maximo;
+    END IF;
+
+    -- 2. Registro de Inscripción
+    INSERT INTO usuarios_inscripcion (
+        alumno_id, curso_id, instructor_id, fecha_inscripcion, metodo_pago, estado_inscripcion
+    )
+    VALUES (
+        p_alumno_id, p_curso_id, p_instructor_id, CURRENT_DATE, p_metodo_pago, 'Activa'
+    )
+    RETURNING id INTO v_inscripcion_id;
+
+    -- 3. Registro del Detalle
+    v_subtotal := p_cantidad * p_precio_unitario;
+    
+    INSERT INTO usuarios_detalleinscripcion (
+        inscripcion_id, concepto, cantidad, precio_unitario, subtotal
+    )
+    VALUES (
+        v_inscripcion_id, 'Pago de Cuota de Curso', p_cantidad, p_precio_unitario, v_subtotal
+    );
+
+    -- 4. Actualización de Cupo
+    UPDATE usuarios_curso
+    SET inscritos_actuales = inscritos_actuales + 1
+    WHERE id = p_curso_id;
+
+    RETURN v_inscripcion_id;
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+--Consultar historial del curso por alumno
+
+CREATE OR REPLACE FUNCTION fn_consultar_historial_alumno(
+    p_alumno_usuario_id INTEGER
+)
+RETURNS TABLE (
+    curso_id INTEGER,
+    nombre_curso VARCHAR,
+    fecha_inscripcion DATE,
+    instructor_nombre VARCHAR,
+    estado_inscripcion VARCHAR
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        uc.id AS curso_id,
+        uc.nombre_curso,
+        ui.fecha_inscripcion,
+        uti.nombre_completo AS instructor_nombre,
+        ui.estado_inscripcion
+    FROM
+        usuarios_inscripcion ui
+    JOIN
+        usuarios_curso uc ON ui.curso_id = uc.id
+    JOIN
+        usuarios_instructor uti ON ui.instructor_id = uti.usuario_id
+    JOIN
+        usuarios_alumno ua ON ui.alumno_id = ua.usuario_id
+    WHERE
+        ua.usuario_id = p_alumno_usuario_id
+    ORDER BY
+        ui.fecha_inscripcion DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+
+
+--Generacion de reporte de curso mas solicitado 
+
+
+CREATE OR REPLACE FUNCTION fn_reporte_cursos_mas_solicitados(
+    p_limite INTEGER DEFAULT 10
+)
+RETURNS TABLE (
+    curso_nombre VARCHAR,
+    nivel_curso VARCHAR,
+    total_inscripciones BIGINT
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        uc.nombre_curso,
+        uc.nivel,
+        COUNT(ui.id) AS total_inscripciones
+    FROM
+        usuarios_inscripcion ui
+    JOIN
+        usuarios_curso uc ON ui.curso_id = uc.id
+    WHERE
+        ui.estado_inscripcion = 'Activa'
+    GROUP BY
+        uc.nombre_curso, uc.nivel
+    ORDER BY
+        total_inscripciones DESC
+    LIMIT p_limite;
+END;
+$$ LANGUAGE plpgsql;
+
+
+--Actualizar la disponibilidad de cupos por curso 
+
+CREATE OR REPLACE FUNCTION fn_actualizar_cupo_maximo_curso(
+    p_curso_id INTEGER,
+    p_nuevo_cupo_maximo INTEGER
+)
+RETURNS TEXT AS $$
+DECLARE
+    v_inscritos_actuales INTEGER;
+BEGIN
+    -- 1. Obtener inscritos actuales
+    SELECT inscritos_actuales INTO v_inscritos_actuales
+    FROM usuarios_curso
+    WHERE id = p_curso_id;
+
+    -- 2. Validación de lógica (no permitir un cupo máximo menor a los inscritos actuales)
+    IF v_inscritos_actuales > p_nuevo_cupo_maximo THEN
+        RAISE EXCEPTION 'No se puede establecer un cupo máximo (%) menor a los alumnos ya inscritos (%).', p_nuevo_cupo_maximo, v_inscritos_actuales;
+    END IF;
+
+    -- 3. Actualizar el Cupo Máximo
+    UPDATE usuarios_curso
+    SET cupo_maximo = p_nuevo_cupo_maximo
+    WHERE id = p_curso_id;
+
+    RETURN 'Cupo máximo del curso ID ' || p_curso_id || ' actualizado a ' || p_nuevo_cupo_maximo || ' exitosamente.';
+
+END;
+$$ LANGUAGE plpgsql;
+
+
+--Aplicacion de descuento
+
+CREATE OR REPLACE FUNCTION fn_aplicar_descuento_recurrente(
+    p_inscripcion_id INTEGER,
+    p_porcentaje_descuento NUMERIC -- e.g., 0.10 para 10%
+)
+RETURNS TEXT AS $$
+DECLARE
+    v_alumno_id INTEGER;
+    v_num_inscripciones INTEGER;
+    v_precio_original NUMERIC;
+    v_nuevo_subtotal NUMERIC;
+    v_cantidad INTEGER;
+    v_concepto VARCHAR(50);
+BEGIN
+    -- 1. Bloquear la fila de la inscripción y obtener datos
+    SELECT alumno_id INTO v_alumno_id
+    FROM usuarios_inscripcion
+    WHERE id = p_inscripcion_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Inscripción ID % no encontrada.', p_inscripcion_id;
+    END IF;
+
+    -- 2. Contar inscripciones previas (excluyendo la actual o la que se está procesando)
+    SELECT COUNT(id) INTO v_num_inscripciones
+    FROM usuarios_inscripcion
+    WHERE alumno_id = v_alumno_id AND id != p_inscripcion_id;
+
+    -- 3. Aplicar lógica de descuento (ejemplo: recurrente si tiene 2 o más inscripciones previas)
+    IF v_num_inscripciones >= 2 THEN
+        
+        -- Obtener detalle actual
+        SELECT precio_unitario, cantidad, concepto INTO v_precio_original, v_cantidad, v_concepto
+        FROM usuarios_detalleinscripcion
+        WHERE inscripcion_id = p_inscripcion_id;
+
+        -- Aplicar descuento y recalcular subtotal
+        v_nuevo_subtotal := v_precio_original * v_cantidad * (1 - p_porcentaje_descuento);
+
+        -- Actualizar el detalle de la inscripción
+        UPDATE usuarios_detalleinscripcion
+        SET 
+            precio_unitario = v_precio_original * (1 - p_porcentaje_descuento), -- El precio unitario reflejará el descuento
+            subtotal = v_nuevo_subtotal,
+            concepto = v_concepto || ' (Desc. Recurrente ' || (p_porcentaje_descuento * 100) || '%)'
+        WHERE inscripcion_id = p_inscripcion_id;
+
+        RETURN 'Descuento del ' || (p_porcentaje_descuento * 100) || '% aplicado a la inscripción ID ' || p_inscripcion_id || ' por alumno recurrente.';
+    ELSE
+        RETURN 'Alumno ID ' || v_alumno_id || ' no cumple con los criterios de recurrencia (menos de 2 inscripciones previas). No se aplicó descuento.';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+

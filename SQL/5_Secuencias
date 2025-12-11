@@ -1,0 +1,24 @@
+--5.SEcuencias 
+
+--lipiamos la tabla usando identity 
+
+ALTER TABLE usuarios_alumno ADD COLUMN id SERIAL PRIMARY KEY;
+
+--
+SELECT nextval('usuarios_curso_id_seq');
+
+--Implementacion para usuarios_inscripcion 
+
+-- 1. Añadir el campo ID (si no existe) y definirlo como SERIAL
+ALTER TABLE usuarios_inscripcion ADD COLUMN id SERIAL PRIMARY KEY;
+
+-- El tipo SERIAL crea automáticamente la secuencia: usuarios_inscripcion_id_seq
+
+
+-- Creación de la secuencia manual
+CREATE SEQUENCE inscripcion_seq START 1000;
+
+-- Asignación de la secuencia como valor por defecto
+ALTER TABLE usuarios_inscripcion
+ALTER COLUMN id SET DEFAULT nextval('inscripcion_seq');
+

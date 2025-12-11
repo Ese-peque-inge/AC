@@ -1,0 +1,135 @@
+--8 TRY catch
+--utilizaremos esta tabla existente
+
+CREATE TABLE IF NOT EXISTS auditoria_transacciones_errores (
+    id SERIAL PRIMARY KEY,
+    proceso VARCHAR(100) NOT NULL,
+    parametros_entrada JSONB,
+    mensaje_error TEXT NOT NULL,
+    usuario_accion VARCHAR(50) DEFAULT CURRENT_USER,
+    fecha_error TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW()
+);
+
+--Registro de inscripcion , manejo de error por cupo lleno 
+
+CREATE OR REPLACE FUNCTION fn_inscripcion_con_try_catch(
+    p_alumno_id INTEGER,
+    p_curso_id INTEGER,
+    p_instructor_id INTEGER,
+    p_metodo_pago VARCHAR,
+    p_precio_unitario NUMERIC
+)
+RETURNS TEXT AS $$
+DECLARE
+    v_nueva_inscripcion_id INTEGER;
+    v_cupo_maximo INTEGER;
+    v_inscritos_actuales INTEGER;
+    v_json_params JSONB;
+BEGIN
+    -- Configurar parámetros para el registro de errores
+    v_json_params := jsonb_build_object(
+        'alumno_id', p_alumno_id,
+        'curso_id', p_curso_id
+    );
+
+    -- 1. Iniciar la Transacción (implícito)
+
+    -- 2. Validación y Comprobación de Cupo
+    SELECT cupo_maximo, inscritos_actuales INTO v_cupo_maximo, v_inscritos_actuales
+    FROM usuarios_curso
+    WHERE id = p_curso_id
+    FOR UPDATE; 
+
+    IF v_inscritos_actuales >= v_cupo_maximo THEN
+        -- Provocar un error controlado para ser capturado por EXCEPTION
+        RAISE EXCEPTION 'ERROR_CUPOS: El curso ID % ha alcanzado su cupo máximo.', p_curso_id;
+    END IF;
+
+    -- 3. Proceso de Inserción (Éxito)
+    INSERT INTO usuarios_inscripcion (
+        alumno_id, curso_id, instructor_id, metodo_pago
+    )
+    VALUES (
+        p_alumno_id, p_curso_id, p_instructor_id, p_metodo_pago
+    )
+    RETURNING id INTO v_nueva_inscripcion_id;
+
+    -- Actualización de Cupo (Éxito)
+    UPDATE usuarios_curso
+    SET inscritos_actuales = inscritos_actuales + 1
+    WHERE id = p_curso_id;
+
+    -- 4. COMMIT (implícito)
+    RETURN 'Inscripción Exitosa. ID: ' || v_nueva_inscripcion_id;
+
+-- Bloque EXCEPTION: Manejo de errores (simulación de CATCH)
+EXCEPTION
+    WHEN OTHERS THEN
+        -- ROLLBACK automático por el error
+        
+        -- Registro del error en la tabla centralizada
+        INSERT INTO auditoria_transacciones_errores (
+            proceso, parametros_entrada, mensaje_error
+        )
+        VALUES (
+            'INSCRIPCION_CON_TRY_CATCH', v_json_params, SQLERRM
+        );
+        
+        -- Devolver un mensaje de error legible
+        RETURN 'FALLO TRANSACCIONAL: No se pudo completar la inscripción. Razón: ' || SQLERRM;
+END;
+$$ LANGUAGE plpgsql;
+
+--Actualizacion de estado de instructor 
+
+
+CREATE OR REPLACE FUNCTION fn_actualizar_instructor_con_try_catch(
+    p_instructor_id INTEGER,
+    p_nuevo_estado VARCHAR
+)
+RETURNS TEXT AS $$
+DECLARE
+    v_filas_afectadas INTEGER;
+    v_json_params JSONB;
+BEGIN
+    -- Configurar parámetros para el registro de errores
+    v_json_params := jsonb_build_object(
+        'instructor_id', p_instructor_id,
+        'nuevo_estado', p_nuevo_estado
+    );
+
+    -- 1. Iniciar la Transacción (implícito)
+    
+    -- 2. Proceso de Actualización
+    UPDATE usuarios_instructor
+    SET estado = p_nuevo_estado
+    WHERE usuario_id = p_instructor_id;
+    
+    GET DIAGNOSTICS v_filas_afectadas = ROW_COUNT;
+
+    -- 3. Validación de éxito
+    IF v_filas_afectadas = 0 THEN
+        -- Provocar un error controlado si no se encontró el instructor
+        RAISE EXCEPTION 'ERROR_NO_EXISTE: El instructor con ID % no fue encontrado para actualizar.', p_instructor_id;
+    END IF;
+
+    -- 4. COMMIT (implícito)
+    RETURN 'Actualización Exitosa. Instructor ID ' || p_instructor_id || ' ahora en estado ' || p_nuevo_estado;
+
+-- Bloque EXCEPTION: Manejo de errores
+EXCEPTION
+    WHEN OTHERS THEN
+        -- ROLLBACK automático por el error
+        
+        -- Registro del error
+        INSERT INTO auditoria_transacciones_errores (
+            proceso, parametros_entrada, mensaje_error
+        )
+        VALUES (
+            'ACTUALIZACION_INSTRUCTOR_TRY_CATCH', v_json_params, SQLERRM
+        );
+        
+        -- Devolver un mensaje de error
+        RETURN 'FALLO TRANSACCIONAL: La actualización falló. Razón: ' || SQLERRM;
+END;
+$$ LANGUAGE plpgsql;

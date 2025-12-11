@@ -1,0 +1,194 @@
+--4.Tablas de auditoria 
+
+
+--aduditoria para cursos 
+
+CREATE TABLE auditoria_cursos_log (
+    id SERIAL PRIMARY KEY,
+    curso_id INTEGER NOT NULL,
+    tipo_cambio CHAR(1) NOT NULL CHECK (tipo_cambio IN ('I', 'U', 'D')), -- I: INSERT, U: UPDATE, D: DELETE
+    fecha_cambio TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    usuario_modificador VARCHAR(50) DEFAULT CURRENT_USER,
+    
+    -- Conservación de valores (Campos clave que pueden cambiar)
+    nombre_curso_previo VARCHAR(100),
+    nombre_curso_nuevo VARCHAR(100),
+    estado_curso_previo VARCHAR(20),
+    estado_curso_nuevo VARCHAR(20),
+    cupo_maximo_previo INTEGER,
+    cupo_maximo_nuevo INTEGER
+);
+
+--auditoria para instructor
+
+CREATE TABLE auditoria_instructores_log (
+    id SERIAL PRIMARY KEY,
+    instructor_usuario_id INTEGER NOT NULL,
+    tipo_cambio CHAR(1) NOT NULL CHECK (tipo_cambio IN ('I', 'U', 'D')),
+    fecha_cambio TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+    usuario_modificador VARCHAR(50) DEFAULT CURRENT_USER,
+    
+    -- Conservación de valores
+    nombre_completo_previo VARCHAR(100),
+    nombre_completo_nuevo VARCHAR(100),
+    especialidad_previo VARCHAR(50),
+    especialidad_nuevo VARCHAR(50),
+    estado_previo VARCHAR(20),
+    estado_nuevo VARCHAR(20)
+);
+
+--Auditoria para cursos 
+
+CREATE OR REPLACE FUNCTION fn_auditar_curso()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO auditoria_cursos_log (
+            curso_id, tipo_cambio, 
+            nombre_curso_nuevo, estado_curso_nuevo, cupo_maximo_nuevo
+        )
+        VALUES (
+            NEW.id, 'I', 
+            NEW.nombre_curso, NEW.estado_curso, NEW.cupo_maximo
+        );
+        RETURN NEW;
+    
+    ELSIF (TG_OP = 'UPDATE') THEN
+        IF (OLD.* IS DISTINCT FROM NEW.*) THEN -- Solo si hay cambios reales
+            INSERT INTO auditoria_cursos_log (
+                curso_id, tipo_cambio,
+                nombre_curso_previo, nombre_curso_nuevo,
+                estado_curso_previo, estado_curso_nuevo,
+                cupo_maximo_previo, cupo_maximo_nuevo
+            )
+            VALUES (
+                NEW.id, 'U',
+                OLD.nombre_curso, NEW.nombre_curso,
+                OLD.estado_curso, NEW.estado_curso,
+                OLD.cupo_maximo, NEW.cupo_maximo
+            );
+        END IF;
+        RETURN NEW;
+    
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO auditoria_cursos_log (
+            curso_id, tipo_cambio, 
+            nombre_curso_previo, estado_curso_previo, cupo_maximo_previo
+        )
+        VALUES (
+            OLD.id, 'D',
+            OLD.nombre_curso, OLD.estado_curso, OLD.cupo_maximo
+        );
+        RETURN OLD;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE TRIGGER TRG_AUDIT_CURSOS
+AFTER INSERT OR UPDATE OR DELETE ON usuarios_curso
+FOR EACH ROW
+EXECUTE FUNCTION fn_auditar_curso();
+
+--Auditorioa para instructores 
+
+CREATE OR REPLACE FUNCTION fn_auditar_instructor()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO auditoria_instructores_log (
+            instructor_usuario_id, tipo_cambio, 
+            nombre_completo_nuevo, especialidad_nuevo, estado_nuevo
+        )
+        VALUES (
+            NEW.usuario_id, 'I', 
+            NEW.nombre_completo, NEW.especialidad, NEW.estado
+        );
+        RETURN NEW;
+        
+    ELSIF (TG_OP = 'UPDATE') THEN
+        IF (OLD.* IS DISTINCT FROM NEW.*) THEN
+            INSERT INTO auditoria_instructores_log (
+                instructor_usuario_id, tipo_cambio,
+                nombre_completo_previo, nombre_completo_nuevo,
+                especialidad_previo, especialidad_nuevo,
+                estado_previo, estado_nuevo
+            )
+            VALUES (
+                NEW.usuario_id, 'U',
+                OLD.nombre_completo, NEW.nombre_completo,
+                OLD.especialidad, NEW.especialidad,
+                OLD.estado, NEW.estado
+            );
+        END IF;
+        RETURN NEW;
+    
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO auditoria_instructores_log (
+            instructor_usuario_id, tipo_cambio, 
+            nombre_completo_previo, especialidad_previo, estado_previo
+        )
+        VALUES (
+            OLD.usuario_id, 'D',
+            OLD.nombre_completo, OLD.especialidad, OLD.estado
+        );
+        RETURN OLD;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER TRG_AUDIT_INSTRUCTORES
+AFTER INSERT OR UPDATE OR DELETE ON usuarios_instructor
+FOR EACH ROW
+EXECUTE FUNCTION fn_auditar_instructor();
+
+
+--Auditoria para inscripciones 
+
+-- Suponiendo la tabla auditoria_inscripciones_historial del Punto 1 (o una nueva auditoria_inscripciones_log)
+
+CREATE OR REPLACE FUNCTION fn_auditar_inscripcion_log()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Utilizaremos la tabla ya definida: auditoria_inscripciones_historial
+    
+    IF (TG_OP = 'UPDATE' AND OLD.estado_inscripcion IS DISTINCT FROM NEW.estado_inscripcion) THEN
+        INSERT INTO auditoria_inscripciones_historial (
+            inscripcion_id, accion_realizada, datos_inscripcion_antes
+        )
+        VALUES (
+            NEW.id, 'CAMBIO_ESTADO: ' || OLD.estado_inscripcion || ' -> ' || NEW.estado_inscripcion, 
+            to_jsonb(OLD)
+        );
+    
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO auditoria_inscripciones_historial (
+            inscripcion_id, accion_realizada, datos_inscripcion_antes
+        )
+        VALUES (
+            OLD.id, 'ELIMINACION', 
+            to_jsonb(OLD)
+        );
+        
+    ELSIF (TG_OP = 'INSERT') THEN
+        INSERT INTO auditoria_inscripciones_historial (
+            inscripcion_id, accion_realizada, datos_inscripcion_antes -- datos_inscripcion_antes puede ser null o una versión de los datos
+        )
+        VALUES (
+            NEW.id, 'INSERCION', 
+            '{}'::jsonb -- Dejamos vacío o una marca
+        );
+    END IF;
+    
+    RETURN NULL; -- Es un trigger AFTER
+END;
+$$ LANGUAGE plpgsql;
+
+-- Este trigger se agrega o reemplaza el de auditoría del Punto 1 si se necesita un log más detallado.
+CREATE OR REPLACE TRIGGER TRG_AUDIT_INSCRIPCION_LOG
+AFTER INSERT OR UPDATE OR DELETE ON usuarios_inscripcion
+FOR EACH ROW
+EXECUTE FUNCTION fn_auditar_inscripcion_log();
+
+
+

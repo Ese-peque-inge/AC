@@ -1,0 +1,15 @@
+Select * from usuarios_alumno
+
+select * from usuarios_recuperarcontrasena
+
+select * from usuarios_instructor
+
+select * from usuarios_administrador
+
+select * from usuarios_curso
+
+select * from usuarios_inscripcion
+
+select * from usuarios_detalleinscripcion 
+
+

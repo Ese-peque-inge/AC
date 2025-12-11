@@ -1,0 +1,27 @@
+--7_Indices y sequences 
+
+--indice email
+
+
+CREATE UNIQUE INDEX idx_unique_alumno_email
+ON usuarios_alumno (email);
+
+
+--indice curso 
+
+CREATE INDEX idx_curso_estado
+ON usuarios_curso (estado_curso);
+
+--fecha inscripcion 
+
+CREATE INDEX idx_inscripcion_fecha
+ON usuarios_inscripcion (fecha_inscripcion);
+
+--indice reporte
+
+CREATE INDEX idx_curso_periodo
+ON usuarios_curso (fecha_inicio, estado_curso);
+
+
+
+
